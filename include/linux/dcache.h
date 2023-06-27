@@ -84,8 +84,10 @@ struct dentry {
 	unsigned int d_flags;		/* protected by d_lock */
 	seqcount_spinlock_t d_seq;	/* per dentry seqlock */
 	struct hlist_bl_node d_hash;	/* lookup hash list */
+	struct hlist_bl_node d_hash2;	/* lookup hash list2 */
 	struct dentry *d_parent;	/* parent directory */
 	struct qstr d_name;
+	struct qstr d_name2;		/* full name */
 	struct inode *d_inode;		/* Where the name belongs to - NULL is
 					 * negative */
 	unsigned char d_iname[DNAME_INLINE_LEN];	/* small names */
@@ -333,6 +335,11 @@ extern struct dentry *dget_parent(struct dentry *dentry);
 static inline int d_unhashed(const struct dentry *dentry)
 {
 	return hlist_bl_unhashed(&dentry->d_hash);
+}
+
+static inline int d_unhashed2(const struct dentry *dentry)
+{
+	return hlist_bl_unhashed(&dentry->d_hash2);
 }
 
 static inline int d_unlinked(const struct dentry *dentry)
@@ -598,5 +605,8 @@ struct name_snapshot {
 };
 void take_dentry_name_snapshot(struct name_snapshot *, struct dentry *);
 void release_dentry_name_snapshot(struct name_snapshot *);
+
+struct dentry *dentry_lookup_fastpath(struct qstr *name, struct dentry *parent);
+void hashtable2_add_dentry(struct dentry *dentry);
 
 #endif	/* __LINUX_DCACHE_H */

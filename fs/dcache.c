@@ -97,12 +97,19 @@ EXPORT_SYMBOL(dotdot_name);
  */
 
 static unsigned int d_hash_shift __read_mostly;
+static unsigned int d_hash_shift2 __read_mostly;
 
 static struct hlist_bl_head *dentry_hashtable __read_mostly;
+static struct hlist_bl_head *dentry_hashtable2 __read_mostly;
 
 static inline struct hlist_bl_head *d_hash(unsigned int hash)
 {
 	return dentry_hashtable + (hash >> d_hash_shift);
+}
+
+static inline struct hlist_bl_head *d_hash2(unsigned int hash)
+{
+	return dentry_hashtable2 + (hash >> d_hash_shift2);
 }
 
 #define IN_LOOKUP_SHIFT 10
@@ -501,12 +508,28 @@ static void ___d_drop(struct dentry *dentry)
 	hlist_bl_unlock(b);
 }
 
+static void ___d_drop2(struct dentry *dentry)
+{
+	struct hlist_bl_head *b;
+
+	b = d_hash(dentry->d_name2.hash);
+
+	hlist_bl_lock(b);
+	__hlist_bl_del(&dentry->d_hash2);
+	hlist_bl_unlock(b);
+}
+
 void __d_drop(struct dentry *dentry)
 {
 	if (!d_unhashed(dentry)) {
 		___d_drop(dentry);
 		dentry->d_hash.pprev = NULL;
 		write_seqcount_invalidate(&dentry->d_seq);
+	}
+
+	if (!d_unhashed2(dentry)) {
+		___d_drop2(dentry);
+		dentry->d_hash2.pprev = NULL;
 	}
 }
 EXPORT_SYMBOL(__d_drop);
@@ -1814,6 +1837,7 @@ static struct dentry *__d_alloc(struct super_block *sb, const struct qstr *name)
 	dentry->d_op = NULL;
 	dentry->d_fsdata = NULL;
 	INIT_HLIST_BL_NODE(&dentry->d_hash);
+	INIT_HLIST_BL_NODE(&dentry->d_hash2);
 	INIT_LIST_HEAD(&dentry->d_lru);
 	INIT_LIST_HEAD(&dentry->d_subdirs);
 	INIT_HLIST_NODE(&dentry->d_u.d_alias);
@@ -3296,6 +3320,18 @@ static void __init dcache_init_early(void)
 					0,
 					0);
 	d_hash_shift = 32 - d_hash_shift;
+
+	dentry_hashtable2 =
+		alloc_large_system_hash("Dentry cache2",
+					sizeof(struct hlist_bl_head),
+					dhash_entries,
+					13,
+					HASH_EARLY | HASH_ZERO,
+					&d_hash_shift2,
+					NULL,
+					0,
+					0);
+	d_hash_shift2 = 32 - d_hash_shift2;
 }
 
 static void __init dcache_init(void)
@@ -3324,6 +3360,18 @@ static void __init dcache_init(void)
 					0,
 					0);
 	d_hash_shift = 32 - d_hash_shift;
+
+	dentry_hashtable2 =
+		alloc_large_system_hash("Dentry cache2",
+					sizeof(struct hlist_bl_head),
+					dhash_entries,
+					13,
+					HASH_EARLY | HASH_ZERO,
+					&d_hash_shift2,
+					NULL,
+					0,
+					0);
+	d_hash_shift2 = 32 - d_hash_shift2;
 }
 
 /* SLAB cache for __getname() consumers */
@@ -3353,4 +3401,54 @@ void __init vfs_caches_init(void)
 	mnt_init();
 	bdev_cache_init();
 	chrdev_init();
+}
+
+struct dentry *dentry_lookup_fastpath(struct qstr *name, struct dentry *parent)
+{
+	struct hlist_bl_head *b = d_hash2(hashlen_hash(name->hash_len));
+	struct hlist_bl_node *node;
+	struct dentry *dentry;
+
+	hlist_bl_lock(b);
+	hlist_bl_for_each_entry(dentry, node, b, d_hash2) {
+		int tlen;
+		const char *tname;
+
+		// if (!dentry)
+		// 	continue;
+		// if (d_unhashed2(dentry))
+		// 	continue;
+		// if (hashlen_hash(name->hash_len) != hashlen_hash(dentry->d_name2.hash_len))
+		// 	continue;
+		// if (hashlen_len(name->hash_len) != hashlen_len(dentry->d_name2.hash_len))
+		// 	continue;
+		
+		// tlen = dentry->d_name2.len;
+		// tname = dentry->d_name2.name;
+		// if (parent->d_op->d_compare(dentry, tlen, tname, name) != 0)
+		// 	continue;
+
+		// for (int i = 0; i < name->len && name->name[i] && dentry->d_name2.name[i]; i++) {
+		// 	if (name->name[i] != dentry->d_name2.name[i])
+		// 		continue;
+		// }
+		hlist_bl_unlock(b);
+		printk_ratelimited(KERN_INFO "dentry_lookup_fastpath success! name->name: %s, dentry->d_name2.name: %s", name->name, dentry->d_name2.name);
+		return NULL;
+		return dentry;
+	}
+	hlist_bl_unlock(b);
+	return NULL;
+}
+
+void hashtable2_add_dentry(struct dentry *dentry)
+{
+	spin_lock(&dentry->d_lock);
+	struct hlist_bl_head *b = d_hash2(hashlen_hash(dentry->d_name2.hash_len));
+	struct hlist_bl_node *node = &(dentry->d_hash2);
+
+	hlist_bl_lock(b);
+	hlist_bl_add_head(node, b);
+	hlist_bl_unlock(b);
+	spin_unlock(&dentry->d_lock);
 }

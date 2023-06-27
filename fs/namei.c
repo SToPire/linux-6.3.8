@@ -41,6 +41,7 @@
 #include <linux/bitops.h>
 #include <linux/init_task.h>
 #include <linux/uaccess.h>
+#include <linux/string.h>
 
 #include "internal.h"
 #include "mount.h"
@@ -2228,6 +2229,20 @@ static inline u64 hash_name(const void *salt, const char *name)
 
 #endif
 
+static inline u64 hash_name2(const void *salt, const char *name)
+{
+	unsigned long hash = init_name_hash(salt);
+	unsigned long len = 0, c;
+
+	c = (unsigned char)*name;
+	do {
+		len++;
+		hash = partial_name_hash(c, hash);
+		c = (unsigned char)name[len];
+	} while (c);
+	return hashlen_create(end_name_hash(hash), len);
+}
+
 /*
  * Name resolution.
  * This is the basic name resolution function, turning a pathname into
@@ -2238,6 +2253,12 @@ static inline u64 hash_name(const void *salt, const char *name)
  */
 static int link_path_walk(const char *name, struct nameidata *nd)
 {
+	int last_pos = 0; // the position of the last '/'
+	int last_len = 0; // the length of the last component of name
+	char *name_wo_last;
+	char *name_last;
+	u64 hash_len_wo_last, hash_len_last;
+	struct dentry *dentry = NULL;
 	int depth = 0; // depth <= nd->depth
 	int err;
 
@@ -2245,6 +2266,47 @@ static int link_path_walk(const char *name, struct nameidata *nd)
 	nd->flags |= LOOKUP_PARENT;
 	if (IS_ERR(name))
 		return PTR_ERR(name);
+	
+	for (int i = 0; *(name + i); i++) {
+		if (*(name + i) == '/') {
+			last_pos = i;
+			last_len = 0;
+		} else {
+			last_len++;
+		}
+	}
+	if (last_len == 0)
+		goto baseline;
+	name_wo_last = kmalloc(last_pos + 1, GFP_KERNEL);
+	memcpy(name_wo_last, name, last_pos);
+	name_wo_last[last_pos] = '\0';
+	name_last = kmalloc(last_len + 1, GFP_KERNEL);
+	memcpy(name_last, name + last_pos + 1, last_len);
+	name_last[last_len] = '\0';
+	printk_ratelimited(KERN_INFO "link_path_walk name: %s, name_wo_last: %s, name_last: %s", name, name_wo_last, name_last);	
+	hash_len_wo_last = hash_name2(nd->path.dentry, name_wo_last);
+	struct qstr qstr_wo_last = { { .hash_len = hash_len_wo_last }, .name = name_wo_last };
+	dentry = dentry_lookup_fastpath(&qstr_wo_last, nd->path.dentry);
+	if (dentry) {
+		struct mnt_idmap *idmap;
+			
+		hash_len_last = hash_name(dentry, name_last);
+		// TODO: pass dentry, inode and last to nd, need to be verified
+		nd->last.hash_len = hash_len_last;
+		nd->last.name = name_last;
+		nd->last_type = LAST_NORM;
+		step_into(nd, 0, dentry);	
+		idmap = mnt_idmap(nd->path.mnt);
+		err = may_lookup(idmap, nd);
+		if (err)
+			return err;
+		nd->dir_vfsuid = i_uid_into_vfsuid(idmap, nd->inode);
+		nd->dir_mode = nd->inode->i_mode;
+		nd->flags &= ~LOOKUP_PARENT;
+		return 0;
+	}
+
+baseline:
 	while (*name=='/')
 		name++;
 	if (!*name) {
@@ -2311,6 +2373,10 @@ OK:
 				nd->dir_vfsuid = i_uid_into_vfsuid(idmap, nd->inode);
 				nd->dir_mode = nd->inode->i_mode;
 				nd->flags &= ~LOOKUP_PARENT;
+
+				nd->path.dentry->d_name2.hash_len = hash_len_wo_last;
+				nd->path.dentry->d_name2.name = name_wo_last;
+				hashtable2_add_dentry(nd->path.dentry);
 				return 0;
 			}
 			/* last component of nested symlink */
