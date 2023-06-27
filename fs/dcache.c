@@ -512,7 +512,7 @@ static void ___d_drop2(struct dentry *dentry)
 {
 	struct hlist_bl_head *b;
 
-	b = d_hash(dentry->d_name2.hash);
+	b = d_hash2(dentry->d_name2.hash);
 
 	hlist_bl_lock(b);
 	__hlist_bl_del(&dentry->d_hash2);
@@ -3414,24 +3414,24 @@ struct dentry *dentry_lookup_fastpath(struct qstr *name, struct dentry *parent)
 		int tlen;
 		const char *tname;
 
-		// if (!dentry)
-		// 	continue;
-		// if (d_unhashed2(dentry))
-		// 	continue;
-		// if (hashlen_hash(name->hash_len) != hashlen_hash(dentry->d_name2.hash_len))
-		// 	continue;
-		// if (hashlen_len(name->hash_len) != hashlen_len(dentry->d_name2.hash_len))
-		// 	continue;
+		if (!dentry)
+			continue;
+		if (d_unhashed2(dentry))
+			continue;
+		if (hashlen_hash(name->hash_len) != hashlen_hash(dentry->d_name2.hash_len))
+			continue;
+		if (hashlen_len(name->hash_len) != hashlen_len(dentry->d_name2.hash_len))
+			continue;
 		
 		// tlen = dentry->d_name2.len;
 		// tname = dentry->d_name2.name;
 		// if (parent->d_op->d_compare(dentry, tlen, tname, name) != 0)
 		// 	continue;
 
-		// for (int i = 0; i < name->len && name->name[i] && dentry->d_name2.name[i]; i++) {
-		// 	if (name->name[i] != dentry->d_name2.name[i])
-		// 		continue;
-		// }
+		for (int i = 0; i < name->len && name->name[i] && dentry->d_name2.name[i]; i++) {
+			if (name->name[i] != dentry->d_name2.name[i])
+				continue;
+		}
 		hlist_bl_unlock(b);
 		printk_ratelimited(KERN_INFO "dentry_lookup_fastpath success! name->name: %s, dentry->d_name2.name: %s", name->name, dentry->d_name2.name);
 		return NULL;
@@ -3444,11 +3444,13 @@ struct dentry *dentry_lookup_fastpath(struct qstr *name, struct dentry *parent)
 void hashtable2_add_dentry(struct dentry *dentry)
 {
 	spin_lock(&dentry->d_lock);
-	struct hlist_bl_head *b = d_hash2(hashlen_hash(dentry->d_name2.hash_len));
-	struct hlist_bl_node *node = &(dentry->d_hash2);
+	if (d_unhashed2(dentry)) {
+		struct hlist_bl_head *b = d_hash2(hashlen_hash(dentry->d_name2.hash_len));
+		struct hlist_bl_node *node = &(dentry->d_hash2);
 
-	hlist_bl_lock(b);
-	hlist_bl_add_head(node, b);
-	hlist_bl_unlock(b);
+		hlist_bl_lock(b);
+		hlist_bl_add_head(node, b);
+		hlist_bl_unlock(b);
+	}
 	spin_unlock(&dentry->d_lock);
 }
