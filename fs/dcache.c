@@ -3366,7 +3366,7 @@ static void __init dcache_init(void)
 					sizeof(struct hlist_bl_head),
 					dhash_entries,
 					13,
-					HASH_EARLY | HASH_ZERO,
+					HASH_ZERO,
 					&d_hash_shift2,
 					NULL,
 					0,
