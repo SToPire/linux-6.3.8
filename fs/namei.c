@@ -2255,7 +2255,7 @@ static int link_path_walk(const char *name, struct nameidata *nd)
 {
 	int last_pos = 0; // the position of the last '/'
 	int last_len = 0; // the length of the last component of name
-	char *name_wo_last;
+	char *name_wo_last = NULL;
 	char *name_last;
 	u64 hash_len_wo_last, hash_len_last;
 	struct dentry *dentry = NULL;
@@ -2375,7 +2375,7 @@ OK:
 				nd->dir_mode = nd->inode->i_mode;
 				nd->flags &= ~LOOKUP_PARENT;
 
-				if (!has_symlink && *name_wo_last == '/') {
+				if (!has_symlink && name_wo_last && *name_wo_last == '/') {
 					nd->path.dentry->d_name2.hash_len = hash_len_wo_last;
 					nd->path.dentry->d_name2.name = name_wo_last;
 					hashtable2_add_dentry(nd->path.dentry);
