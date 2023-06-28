@@ -2261,6 +2261,7 @@ static int link_path_walk(const char *name, struct nameidata *nd)
 	struct dentry *dentry = NULL;
 	int depth = 0; // depth <= nd->depth
 	int err;
+	bool has_symlink = false;
 
 	nd->last_type = LAST_ROOT;
 	nd->flags |= LOOKUP_PARENT;
@@ -2374,9 +2375,11 @@ OK:
 				nd->dir_mode = nd->inode->i_mode;
 				nd->flags &= ~LOOKUP_PARENT;
 
-				nd->path.dentry->d_name2.hash_len = hash_len_wo_last;
-				nd->path.dentry->d_name2.name = name_wo_last;
-				hashtable2_add_dentry(nd->path.dentry);
+				if (!has_symlink) {
+					nd->path.dentry->d_name2.hash_len = hash_len_wo_last;
+					nd->path.dentry->d_name2.name = name_wo_last;
+					hashtable2_add_dentry(nd->path.dentry);
+				}
 				return 0;
 			}
 			/* last component of nested symlink */
@@ -2392,6 +2395,7 @@ OK:
 			/* a symlink to follow */
 			nd->stack[depth++].name = name;
 			name = link;
+			has_symlink = true;
 			continue;
 		}
 		if (unlikely(!d_can_lookup(nd->path.dentry))) {
