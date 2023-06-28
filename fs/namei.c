@@ -2276,7 +2276,7 @@ static int link_path_walk(const char *name, struct nameidata *nd)
 			last_len++;
 		}
 	}
-	if (last_len == 0)
+	if (last_pos == 0 || last_len == 0 || *name != '/')
 		goto baseline;
 	name_wo_last = kmalloc(last_pos + 1, GFP_KERNEL);
 	memcpy(name_wo_last, name, last_pos);
@@ -2375,7 +2375,7 @@ OK:
 				nd->dir_mode = nd->inode->i_mode;
 				nd->flags &= ~LOOKUP_PARENT;
 
-				if (!has_symlink) {
+				if (!has_symlink && *name_wo_last == '/') {
 					nd->path.dentry->d_name2.hash_len = hash_len_wo_last;
 					nd->path.dentry->d_name2.name = name_wo_last;
 					hashtable2_add_dentry(nd->path.dentry);
