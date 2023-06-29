@@ -3433,7 +3433,7 @@ struct dentry *dentry_lookup_fastpath(struct qstr *name, struct dentry *parent)
 				continue;
 		}
 		hlist_bl_unlock(b);
-		printk_ratelimited(KERN_INFO "dentry_lookup_fastpath success! name->name: %s, dentry->d_name2.name: %s", name->name, dentry->d_name2.name);
+		// printk_ratelimited(KERN_INFO "dentry_lookup_fastpath success! name->name: %s, dentry->d_name2.name: %s", name->name, dentry->d_name2.name);
 		// return NULL;
 		return dentry;
 	}

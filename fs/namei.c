@@ -2285,7 +2285,7 @@ static int link_path_walk(const char *name, struct nameidata *nd)
 	name_last = kmalloc(last_len + 1, GFP_KERNEL);
 	memcpy(name_last, name + last_pos + 1, last_len);
 	name_last[last_len] = '\0';
-	printk_ratelimited(KERN_INFO "link_path_walk name: %s, name_wo_last: %s, name_last: %s", name, name_wo_last, name_last);	
+	// printk_ratelimited(KERN_INFO "link_path_walk name: %s, name_wo_last: %s, name_last: %s", name, name_wo_last, name_last);	
 	hash_len_wo_last = hash_name2(nd->path.dentry, name_wo_last);
 	struct qstr qstr_wo_last = { { .hash_len = hash_len_wo_last }, .name = name_wo_last };
 	dentry = dentry_lookup_fastpath(&qstr_wo_last, nd->path.dentry);
