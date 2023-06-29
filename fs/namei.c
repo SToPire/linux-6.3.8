@@ -2256,7 +2256,7 @@ static int link_path_walk(const char *name, struct nameidata *nd)
 	int last_pos = 0; // the position of the last '/'
 	int last_len = 0; // the length of the last component of name
 	char *name_wo_last = NULL;
-	char *name_last;
+	char *name_last = NULL;
 	u64 hash_len_wo_last, hash_len_last;
 	struct dentry *dentry = NULL;
 	int depth = 0; // depth <= nd->depth
@@ -2276,7 +2276,8 @@ static int link_path_walk(const char *name, struct nameidata *nd)
 			last_len++;
 		}
 	}
-	if (last_pos == 0 || last_len == 0 || *name != '/')
+	// only focus on /home
+	if (last_pos == 0 || last_len == 0 || *name != '/' || *(name + 1) != 'h')
 		goto baseline;
 	name_wo_last = kmalloc(last_pos + 1, GFP_KERNEL);
 	memcpy(name_wo_last, name, last_pos);
@@ -2290,20 +2291,31 @@ static int link_path_walk(const char *name, struct nameidata *nd)
 	dentry = dentry_lookup_fastpath(&qstr_wo_last, nd->path.dentry);
 	if (dentry) {
 		struct mnt_idmap *idmap;
+		struct path path;
 			
 		hash_len_last = hash_name(dentry, name_last);
-		// TODO: pass dentry, inode and last to nd, need to be verified
+
 		nd->last.hash_len = hash_len_last;
 		nd->last.name = name_last;
 		nd->last_type = LAST_NORM;
-		step_into(nd, 0, dentry);	
+
+		path.mnt = nd->path.mnt;
+		path.dentry = dentry;
+
+		nd->path = path;
+		nd->inode = dentry->d_inode;
+
+		nd->flags &= ~LOOKUP_PARENT;
+		nd->state &= ~ND_JUMPED;
+		nd->next_seq = nd->seq;
+
 		idmap = mnt_idmap(nd->path.mnt);
 		err = may_lookup(idmap, nd);
 		if (err)
 			return err;
 		nd->dir_vfsuid = i_uid_into_vfsuid(idmap, nd->inode);
 		nd->dir_mode = nd->inode->i_mode;
-		nd->flags &= ~LOOKUP_PARENT;
+
 		return 0;
 	}
 
@@ -2375,7 +2387,8 @@ OK:
 				nd->dir_mode = nd->inode->i_mode;
 				nd->flags &= ~LOOKUP_PARENT;
 
-				if (!has_symlink && name_wo_last && *name_wo_last == '/') {
+				// only focus on /home
+				if (!has_symlink && name_wo_last && *name_wo_last == '/' && *(name_wo_last + 1) == 'h') {
 					nd->path.dentry->d_name2.hash_len = hash_len_wo_last;
 					nd->path.dentry->d_name2.name = name_wo_last;
 					hashtable2_add_dentry(nd->path.dentry);
